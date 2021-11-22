@@ -1,0 +1,90 @@
+---
+title: "Course Project Prediction"
+author: "Judith C. Koops"
+date: "4-10-2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data 
+
+```{r cars, echo = FALSE}
+setwd("C:/RstudioGithub/datasciencecoursera/MachineLearning")
+```
+### Loading data and packages
+```{r warning=FALSE}
+library(caret)
+library(dplyr)
+training <- read.csv("pml-training.csv", sep = ",")
+```
+For this assignment I have chosen random forest as the analytical tool to establish which predictors best predict which weight lifting activity (classe) was performed. I chose this model for its high accuracy performance.
+
+The following classes are distinguished:
+
+* Class A -- exactly according to the specification
+* Class B -- throwing the elbows to the front
+* Class C -- lifting the dumbbell only halfway
+* Class D -- lowering the dumbbell only halfway
+* Class E -- throwing the hips to the front
+
+I have deleted the variables that are directly related with the person performing the task (like user name, timestamp etc.). By deleting this information, the model is only trained on the information of the accelerometers. Some accelerometer information were captured as a string variable, I have transformed these to numeric variables.
+
+Random forest cannot be performed on variables which have NA's. Because NA's might be informative for the model, rather than list-wise deleteting these cases, I have set them to 0. 
+
+
+```{r warning=FALSE}
+training <- training %>% select(-c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "new_window", "num_window"))
+training[,1:152] <- sapply(training[,1:152],as.numeric)
+training[is.na(training)] <- 0
+```
+
+Running a random forest model on the whole dataset was too computational intensive for my device. Instead, I ran the model on 983 random observations (= 5% of total training set). I use the remaining 95% of the training dataset for cross-validation and an estimate of the out of sample error of my model.
+
+```{r}
+set.seed(10)
+inTrain <- createDataPartition(y = training$classe, p = 0.05, list = FALSE)
+training_model <- training[inTrain,]
+training_validation <- training[-inTrain,]
+
+dim(training_model)
+dim(training_validation)
+```
+
+### Descriptives
+```{r}
+table(training_model$classe)
+```
+### Prepare model using random forest
+Using the training dataset I trained model to predict the categorical variable *classe* with any of the other variables in the training dataset. I saved the model under the name *modFit1*. 
+
+```{r}
+modFit <- train(classe ~ ., data = training_model, method = "rf", prox = TRUE)
+print(modFit$finalModel)
+```
+
+I examine the cross-validation by applying the model to the remaining 95% of the testing datase, which I called the training_validation dataset. My models give an out of sample error rate of 1931 / (1931 + 16708) = 10.4%
+
+```{r}
+predicted <- predict(modFit,training_validation)
+training_validation$predCorrect <- predicted == training_validation$classe
+
+table(training_validation$predCorrect)
+table(predicted,training_validation$classe)
+```
+
+In a final step, I use the module to predict the 20 test cases avialable in the test data.
+
+```{r}
+testing <- read.csv("pml-testing.csv", sep = ",")
+testing <- testing %>% select(-c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "new_window", "num_window"))
+testing[,1:152] <- sapply(testing[,1:152],as.numeric)
+testing[is.na(testing)] <- 0
+
+pred_test <- predict(modFit,testing)
+pred_test
+```
